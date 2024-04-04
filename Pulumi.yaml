@@ -1,0 +1,123 @@
+name: aws-eks-yaml
+runtime: yaml
+description: AWS EKS WITH PULUMI
+resources:
+  eks-cluster-iam:
+    type: aws:iam:Role
+    properties:
+      name: pulumi_eks_cluster_role
+      assumeRolePolicy: ${eksclusterAssumeRolePolicy.json}
+  eks-cluster-policy:
+    type: aws:iam:RolePolicyAttachment
+    properties:
+      policyArn: arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      role: ${eks-cluster-iam.name}
+  eks-service-policy:
+    type: aws:iam:RolePolicyAttachment
+    properties:
+      policyArn: arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      role: ${eks-cluster-iam.name}
+  eks-node-iam:
+    type: aws:iam:Role
+    properties:
+      name: pulumi_eks_node_role
+      assumeRolePolicy:
+        fn::toJSON:
+          Statement:
+            - Action: sts:AssumeRole
+              Effect: Allow
+              Principal:
+                Service: ec2.amazonaws.com
+          Version: 2012-10-17     
+  eks-AmazonEKSWorkerNodePolicy:
+    type: aws:iam:RolePolicyAttachment
+    properties:
+      policyArn: arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+      role: ${eks-node-iam.name}
+  example-AmazonEKSCNIPolicy:
+    type: aws:iam:RolePolicyAttachment
+    properties:
+      policyArn: arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      role: ${eks-node-iam.name}
+  example-AmazonEC2ContainerRegistryReadOnly:
+    type: aws:iam:RolePolicyAttachment
+    properties:
+      policyArn: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      role: ${eks-node-iam.name}
+  eksroleprofile:
+    type: aws:iam:InstanceProfile
+    properties:
+      name: awsinstancepolicyattached
+      role: ${eks-node-iam.name}     
+  default_vpc:
+    type: aws:ec2:DefaultVpc
+    properties:
+      tags:
+        Name: Default VPC    
+  security_group_attached:
+    type: aws:ec2:SecurityGroup    
+    properties:
+      vpcId: ${default_vpc.id}
+      ingress:
+        - fromPort: 0
+          toPort: 65535
+          protocol: 'tcp'
+          cidrBlocks:
+            - 0.0.0.0/0
+      egress:
+        - fromPort: 0
+          toPort: 65535
+          protocol: 'tcp'
+          cidrBlocks:
+            - 0.0.0.0/0
+      tags:
+        Name: eks_pulumi
+  cluster:
+    type: aws:eks:Cluster
+    properties:
+      name: ${eksclustername}
+      roleArn: ${eks-cluster-iam.arn}
+      vpcConfig: 
+        subnetIds:
+          - subnet-750c7613
+          - subnet-6c36764d
+          - subnet-b45e62ba
+        securityGroupIds: 
+          - ${security_group_attached.id}           
+    options:
+       dependsOn:
+         - ${security_group_attached}
+  eks_node_group:
+    type: aws:eks:NodeGroup
+    properties:
+      nodeGroupName: ${eksnodegroupname}
+      clusterName: ${eksclustername}
+      nodeRoleArn: ${eks-node-iam.arn}
+      instanceTypes: ["t3.medium"]
+      subnetIds:
+        - subnet-750c7613
+        - subnet-6c36764d
+        - subnet-b45e62ba
+      scalingConfig:    
+          desiredSize: 1
+          minSize: 1
+          maxSize: 2
+    options:
+       dependsOn:
+         - ${cluster}
+         - ${eks-node-iam}
+variables:
+  eksclusterAssumeRolePolicy:
+    fn::invoke:
+      function: aws:iam:getPolicyDocument
+      arguments:
+        statements:
+          - actions:
+              - sts:AssumeRole
+            principals:
+              - type: Service
+                identifiers:
+                  - eks.amazonaws.com
+  eksclustername: cluster_pulumi
+  eksnodegroupname: eks-node-pulumi
+
