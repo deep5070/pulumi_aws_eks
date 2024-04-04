@@ -111,7 +111,7 @@ eks_cluster = aws.eks.Cluster("eks_pulumi",
             "subnet-6c36764d",
         ],
     ))
-
+#REPLACE SUBNETS 
 eks_node_group = aws.eks.NodeGroup("eks_pulumi_node_group",
     cluster_name="ec2_cluster_name",
     node_group_name="ec2_node_name",
